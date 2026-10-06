@@ -305,6 +305,7 @@ class ScanReport:
     final_url: str
     status_code: int
     findings: list[HeaderFinding]
+    all_headers: dict[str,str] 
 
     @property
     def score(self) -> int:
@@ -354,7 +355,6 @@ class ScanReport:
         if score >= 60:
             return "D"
         return "F"
-
 
 # =============================================================================
 # Avaliação de cabeçalho — função pura, sem I/O
@@ -496,6 +496,7 @@ def scan(
         final_url=str(response.url),
         status_code=response.status_code,
         findings=findings,
+        all_headers=response_headers, # all_headers armazena todos os cabeçalhos
     )
 
 
@@ -519,8 +520,8 @@ GRADE_COLORS: dict[str, str] = {
     "F": "bright_red",
 }
 
-
-def _render_report(report: ScanReport, console: Console) -> None:
+# É necessário colocar verbose: bool = False visto que futuramente deverá ser feita a verificação
+def _render_report(report: ScanReport, console: Console, verbose: bool = False ) -> None:
     """
     Imprime o relatório do scan como uma tabela rich mais um painel de nota
     """
@@ -543,6 +544,7 @@ def _render_report(report: ScanReport, console: Console) -> None:
             finding.rule.severity,
             finding.note,
         )
+
     console.print(table)
 
     # Navegadores IGNORAM HSTS recebido via HTTP puro conforme RFC 6797 §8.1
@@ -565,7 +567,6 @@ def _render_report(report: ScanReport, console: Console) -> None:
         border_style=grade_color,
     )
     console.print(panel)
-
     # Imprime recomendações para quaisquer descobertas não-ok, para que o
     # usuário tenha uma lista de ações — o que adicionar ou corrigir
     actionable = [f for f in report.findings if f.status != "ok"]
@@ -576,6 +577,12 @@ def _render_report(report: ScanReport, console: Console) -> None:
                 f"  • [yellow]{finding.rule.header}[/yellow] "
                 f"— {finding.rule.recommendation}"
             )
+    if verbose:
+        console.print("[bold]Cabeçalhos brutos recebidos:[/bold]")
+
+        for header,value in report.all_headers.items():
+            console.print(f"{header}: {value}")
+        console.print()
 
 
 # =============================================================================
@@ -609,7 +616,11 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Mostra o relatório final em JSON",
     )
-    
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Mostra todos os cabeçalhos no relatório final",
+    )
     return parser
 
 
@@ -648,7 +659,7 @@ def main() -> int:
     # ensure_ascii=False preserva acentos; indent=2 organiza a saída com indentação.
         print(json.dumps(dados_do_relatorio, ensure_ascii=False, indent=2))
     else:
-        _render_report(report, console)
+        _render_report(report, console, verbose=args.verbose)
     
     if report.grade in ("A", "B"):
         return 0
