@@ -62,6 +62,9 @@ import argparse
 # HSTS, que deve rejeitar `max-age=0`).
 import re
 
+# Terceiros (json):  Constrói tabela JSON
+import json
+
 # Biblioteca padrão: acesso a internals do interpretador — usamos para
 # escrever em stderr e encerrar o processo com um código de status específico.
 import sys
@@ -70,7 +73,7 @@ import sys
 # registro de dados imutável sem escrever boilerplate de `__init__`.
 # asdict foi adicionado posteriormente para desaninhar o HeaderFinding
 # field foi adicionado posteriormente para o all_headers
-from dataclasses import dataclass, asdict, field 
+from dataclasses import dataclass, asdict, field
 
 # Biblioteca padrão: uma dica de tipo que restringe um valor a um pequeno
 # conjunto fixo de strings (aqui: níveis de gravidade como "good"/"warn"). Mypy
@@ -93,8 +96,6 @@ from rich.panel import Panel
 # descoberta de cabeçalho com sua gravidade.
 from rich.table import Table
 
-# Terceiros (json):  Constrói tabela JSON 
-import json
 # =============================================================================
 # Tipo de gravidade — três valores válidos
 # =============================================================================
@@ -145,7 +146,6 @@ class HeaderRule:
     description: str
     recommendation: str
     must_match: str | None = None
-
 
 # =============================================================================
 # Tabela de regras — fonte única de verdade do que verificamos
@@ -239,7 +239,6 @@ RULES: list[HeaderRule] = [
     ),
 ]
 
-
 # =============================================================================
 # Gravidade → pontos. Define a pontuação final
 # =============================================================================
@@ -253,11 +252,9 @@ SEVERITY_POINTS: dict[Severity, int] = {
     "low": 5,
 }
 
-
 # =============================================================================
 # HeaderFinding — o resultado da avaliação de uma regra
 # =============================================================================
-
 
 @dataclass(frozen=True, slots=True,)
 class HeaderFinding:
@@ -281,17 +278,15 @@ class HeaderFinding:
         Breve explicação legível por humanos. Mostrada na tabela ao lado
         da coluna de status
     """
-    
+
     rule: HeaderRule
     status: Status
     actual_value: str | None
     note: str
 
-
 # =============================================================================
 # ScanReport — o resultado completo retornado por scan()
 # =============================================================================
-
 
 @dataclass(frozen=True, slots=True)
 class ScanReport:
@@ -364,7 +359,6 @@ class ScanReport:
 # =============================================================================
 # Separar isso de scan() torna-o trivialmente testável: passe uma
 # regra e um dicionário de cabeçalhos, receba uma descoberta. Sem rede necessária
-
 
 def evaluate_header(
     rule: HeaderRule,
@@ -616,7 +610,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     """
     Constrói o parser argparse usado por main()
     """
-    
+
     parser = argparse.ArgumentParser(
         prog="headers",
         description=(
@@ -668,9 +662,12 @@ def main() -> int:
     # passar após nosso prefixo — o erro subjacente geralmente tem
     # detalhes úteis (falha de DNS, conexão recusada, etc.)
 
-    reports = [] # Guarda os relatórios que deram certo para montar a tabela-resumo depois do loop
-    dados_json = [] # Guarda cada relatório convertido em dicionário para gerar um único JSON no final
-    return_worse = 0 # Mantém o pior código de saída encontrado entre todas as URLs
+    # Guarda os relatórios que deram certo para montar a tabela-resumo depois do loop
+    reports = []
+    # Guarda cada relatório convertido em dicionário para gerar um único JSON no final
+    dados_json = []
+    # Mantém o pior código de saída encontrado entre todas as URLs
+    return_worse = 0
 
     for url in args.url: # Faz o mesmo processo de scan uma vez para cada URL recebida pela CLI
         try:
@@ -681,28 +678,30 @@ def main() -> int:
             continue # Importante o continue para que as outras URLs sejam escaneadas
 
         reports.append(report)
-        
+
         if args.json:
-            dados_do_relatorio = asdict(report) # Transforma o report - que é um objeto - em dicionário
+            # Transforma o report - que é um objeto - em dicionário
+            dados_do_relatorio = asdict(report)
             dados_do_relatorio["score"] = report.score
             dados_do_relatorio["grade"] = report.grade
 
         # converte o dicionário do relatório em texto JSON e o exibe no terminal.
         # ensure_ascii=False preserva acentos; indent=2 organiza a saída com indentação.
-            dados_json.append(dados_do_relatorio) 
+            dados_json.append(dados_do_relatorio)
         else:
             _render_report(report, console, verbose=args.verbose)
-        
+
         if report.grade in ("A", "B"):
             code_of_url = 0
         elif report.grade in ("C", "D"):
             code_of_url = 1
         else:
             code_of_url = 2
+        # Armazena o maior valor, que é o pior resultado
+        return_worse = max(return_worse, code_of_url)
 
-        return_worse = max(return_worse, code_of_url) # Armazena o maior valor, que é o pior resultado
-
-    if args.json: # Imprime todos os relatórios juntos em uma lista JSON depois que todos os scans terminarem
+    # Imprime todos os relatórios juntos em uma lista JSON depois que todos os scans terminarem
+    if args.json:
         print(json.dumps(dados_json, ensure_ascii=False, indent=2))
     elif reports: # Mostra a tabela-resumo
         _render_summary(reports, console)

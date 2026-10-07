@@ -24,13 +24,6 @@ set shell := ["bash", "-uc"]
 # No Windows, utiliza PowerShell em modo não interativo e sem logotipo.
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
-# Disponibiliza os argumentos das receitas para scripts com shebang
-# como `$1`, `$2`, `$@` e `$#`. Sem isso, receitas com shebang só
-# enxergariam os argumentos pela substituição textual `{{args}}`,
-# que é insegura para entradas contendo `$`, pois o texto substituído
-# seria expandido novamente pelo bash.
-set positional-arguments
-
 # Mostra os comandos disponíveis quando `just` é executado sem argumentos.
 default:
     @just --list --unsorted
@@ -149,6 +142,7 @@ fix:
 # quem executou o just.
 [group('run')]
 [no-exit-message]
+[positional-arguments]
 run *args:
     #!/usr/bin/env bash
 
