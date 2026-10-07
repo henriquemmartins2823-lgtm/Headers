@@ -262,12 +262,9 @@ def test_score_all_missing_is_zero() -> None:
 
 def test_grade_threshold_a_at_90_percent() -> None:
     """
-    Passando ambos os high e ambos os mediums (90/100 = 90%) fica exatamente
-    no limite do A
+    As três regras high e as duas regras medium corretas, com as low
+    ausentes, resultam em 120 de 130 pontos: 92%. Portanto, a nota é A.
 
-    A tabela de regras atual totaliza 100 pontos (30 + 30 + 15 + 15 + 5 + 5)
-    Dois `high` = 60 / 100 = 60%, que é nota D
-    Ambos high + ambos mediums = 90 / 100 = 90%, que é nota A
     """
     statuses_by_severity: dict[str, Status] = {
         "high": "ok",
@@ -276,14 +273,14 @@ def test_grade_threshold_a_at_90_percent() -> None:
     }
     statuses: list[Status] = [statuses_by_severity[r.severity] for r in RULES]
     report = _make_report(statuses)
-    assert report.score == 90
+    assert report.score == 92
     assert report.grade == "A"
 
 
 def test_grade_threshold_b_at_83_percent() -> None:
     """
-    Ambos highs ok, um medium ok e o outro weak (60 + 15 + 7.5 = 82.5
-    → arredonda para 83) cai abaixo de 90 e fica na faixa B
+    As três regras high corretas, uma medium ok e outra weak somam
+    112,5 de 130 pontos, arredondados para 87. Isso fica na faixa B.
     """
     # Dois highs ok, mediums divididos entre ok e weak, lows missing
     statuses: list[Status] = []
@@ -297,7 +294,7 @@ def test_grade_threshold_b_at_83_percent() -> None:
         else:
             statuses.append("missing")
     report = _make_report(statuses)
-    assert 80 <= report.score < 90
+    assert report.score == 87
     assert report.grade == "B"
 
 
@@ -326,6 +323,7 @@ def test_scan_mocks_a_clean_response_and_grades_it_correctly() -> None:
                 "X-Frame-Options": "DENY",
                 "Referrer-Policy": "strict-origin-when-cross-origin",
                 "Permissions-Policy": "camera=(), microphone=()",
+                "Cross-Origin-Opener-Policy": "same-origin", # Adicionado depois do novo cabeçalho
             },
         )
     )

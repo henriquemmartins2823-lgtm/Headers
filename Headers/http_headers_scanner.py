@@ -68,7 +68,9 @@ import sys
 
 # Biblioteca padrão: um decorator que transforma uma classe em um pequeno
 # registro de dados imutável sem escrever boilerplate de `__init__`.
-from dataclasses import dataclass, asdict # asdict foi adicionado posteiormente para desaninhar o HeaderFinding
+# asdict foi adicionado posteriormente para desaninhar o HeaderFinding
+# field foi adicionado posteriormente para o all_headers
+from dataclasses import dataclass, asdict, field 
 
 # Biblioteca padrão: uma dica de tipo que restringe um valor a um pequeno
 # conjunto fixo de strings (aqui: níveis de gravidade como "good"/"warn"). Mypy
@@ -305,7 +307,8 @@ class ScanReport:
     final_url: str
     status_code: int
     findings: list[HeaderFinding]
-    all_headers: dict[str,str] 
+    # O field foi utilizado para caso um teste não fornecer cabeçalhos, usar um dicionário vazio
+    all_headers: dict[str, str] = field(default_factory=dict)
 
     @property
     def score(self) -> int:
@@ -584,6 +587,25 @@ def _render_report(report: ScanReport, console: Console, verbose: bool = False )
             console.print(f"{header}: {value}")
         console.print()
 
+# Cria uma tabela pequena para comparar as pontuações e notas de todas as URLs escaneadas
+def _render_summary(reports: list[ScanReport], console: Console) -> None:
+    table = Table(title="Resumo dos scans", title_style="bold cyan")
+
+    table.add_column("URL", style="white")
+    table.add_column("Pontuação", justify="right")
+    table.add_column("Nota", justify="center")
+
+    for report in reports:
+        grade_color = GRADE_COLORS[report.grade]
+
+        table.add_row(
+            report.final_url,
+            f"{report.score} / 100",
+            f"[{grade_color}]{report.grade}[/{grade_color}]",
+        )
+
+    console.print(table)
+
 
 # =============================================================================
 # Infraestrutura do argparse — separada para que testes possam chamá-la diretamente
@@ -603,6 +625,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "url",
+        nargs="+", # nargs="+" aceita uma ou mais URLs e transforma args.url em uma lista
         help="URL completa para escanear (deve incluir http:// ou https://).",
     )
     parser.add_argument(
@@ -644,29 +667,46 @@ def main() -> int:
     # em vez de um traceback cru. Deixamos a própria mensagem do httpx
     # passar após nosso prefixo — o erro subjacente geralmente tem
     # detalhes úteis (falha de DNS, conexão recusada, etc.)
-    try:
-        report = scan(args.url, timeout=args.timeout)
-    except httpx.RequestError as exc:
-        console.print(f"[red]Falha na requisição:[/red] {type(exc).__name__}: {exc}")
-        return 2
-    
-    if args.json:
-        dados_do_relatorio = asdict(report) # Transforma o report - que é um objeto - em dicionário
-        dados_do_relatorio["score"] = report.score
-        dados_do_relatorio["grade"] = report.grade
 
-    # converte o dicionário do relatório em texto JSON e o exibe no terminal.
-    # ensure_ascii=False preserva acentos; indent=2 organiza a saída com indentação.
-        print(json.dumps(dados_do_relatorio, ensure_ascii=False, indent=2))
-    else:
-        _render_report(report, console, verbose=args.verbose)
-    
-    if report.grade in ("A", "B"):
-        return 0
-    if report.grade in ("C", "D"):
-        return 1
-    return 2
+    reports = [] # Guarda os relatórios que deram certo para montar a tabela-resumo depois do loop
+    dados_json = [] # Guarda cada relatório convertido em dicionário para gerar um único JSON no final
+    return_worse = 0 # Mantém o pior código de saída encontrado entre todas as URLs
 
+    for url in args.url: # Faz o mesmo processo de scan uma vez para cada URL recebida pela CLI
+        try:
+            report = scan(url, timeout=args.timeout)
+        except httpx.RequestError as exc:
+            console.print(f"[red]Falha na requisição:[/red] {type(exc).__name__}: {exc}")
+            return_worse = 2
+            continue # Importante o continue para que as outras URLs sejam escaneadas
+
+        reports.append(report)
+        
+        if args.json:
+            dados_do_relatorio = asdict(report) # Transforma o report - que é um objeto - em dicionário
+            dados_do_relatorio["score"] = report.score
+            dados_do_relatorio["grade"] = report.grade
+
+        # converte o dicionário do relatório em texto JSON e o exibe no terminal.
+        # ensure_ascii=False preserva acentos; indent=2 organiza a saída com indentação.
+            dados_json.append(dados_do_relatorio) 
+        else:
+            _render_report(report, console, verbose=args.verbose)
+        
+        if report.grade in ("A", "B"):
+            code_of_url = 0
+        elif report.grade in ("C", "D"):
+            code_of_url = 1
+        else:
+            code_of_url = 2
+
+        return_worse = max(return_worse, code_of_url) # Armazena o maior valor, que é o pior resultado
+
+    if args.json: # Imprime todos os relatórios juntos em uma lista JSON depois que todos os scans terminarem
+        print(json.dumps(dados_json, ensure_ascii=False, indent=2))
+    elif reports: # Mostra a tabela-resumo
+        _render_summary(reports, console)
+    return return_worse # Retorna o pior resultado
 
 # Guarda padrão "se invocado diretamente como script" — permite que o arquivo
 # seja importado por testes sem executar main()

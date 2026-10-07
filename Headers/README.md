@@ -116,6 +116,7 @@ just run -- https://example.com
 | `X-Frame-Options`           | média      | Clickjacking por meio de iframes ocultos                |
 | `Referrer-Policy`           | baixa      | Vazamento de tokens secretos pelo Referer               |
 | `Permissions-Policy`        | baixa      | Scripts de terceiros abusando de câmera, microfone etc. |
+| `Cross-Origin-Opener-Policy`| alta       | Interações indevidas entre origens e ataques XS-Leaks   |
 
 ## Códigos de Saída
 
